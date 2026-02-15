@@ -1,10 +1,5 @@
 # CS 246 Notes
 
-## Table of Contents
-
-[3 Points of View](#3-points-of-view) \
-[Hello World](#hello-world)
-
 ### 3 Points of View
 
 - programmer: write correct code, prevent bugs (cppreference.com)
