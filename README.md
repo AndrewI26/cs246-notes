@@ -1,5 +1,40 @@
 # CS 246 Notes
 
+## Table of Contents
+
+- [3 Points of View](#3-points-of-view)
+- [Hello World](#hello-world)
+- [Streams](#streams)
+- [Dealing with Erroneous Input](#dealing-with-erroneous-input)
+- [Strings](#strings)
+- [Overloading](#overloading)
+- [Structs](#structs)
+- [Constants](#constants)
+- [Parameter Passing](#parameter-passing)
+- [References](#references)
+- [Dynamic Memory Allocation](#dynamic-memory-allocation)
+- [Returning by Value, Reference and Pointer](#returning-by-value-reference-and-pointer)
+- [Operator Overloading](#operator-overloading)
+- [Overloading I/O Operators](#overloading-io-operators)
+- [Compile Bash Script](#compile-bash-script)
+- [Default Constructor](#default-ctor)
+- [The Big 5](#the-big-5)
+  - [Copy Constructor](#copy-ctor)
+  - [Destructor](#destructors)
+  - [Copy Assignment](#copy-assignment)
+  - [Copy/Swap Idiom](#copyswap-idiom)
+- [Move Semantics](#move-semantics)
+- [Object Creation](#object-creation)
+- [Elision](#elision)
+- [Member Operations](#member-operations)
+- [Object Arrays](#object-arrays)
+- [Constant Objects](#constant-objects)
+- [Constantness of an Object](#constantness-of-an-object)
+- [Static](#static)
+- [Object Comparison](#object-comparison)
+- [Invariants and Encapsulation](#invarients-and-encapsulation)
+- [Iterator as an Idiom](#iterator-as-an-idiom)
+
 ### 3 Points of View
 
 - programmer: write correct code, prevent bugs (cppreference.com)
@@ -1696,3 +1731,333 @@ Object creatation steps:
 2. Initializa the parent portion, call the book ctor if not default ctor.
 3. Call ctor's for all object data fields
 4. Run ctor body
+
+```cpp
+Text t{"Fowler", "UML ...", 250, "UML"};
+Book b = t; // object slicing
+Book& bref = t; // no object slicing
+Book* bptr = &t; // no object slicing
+
+cout << bool alpha << b.isHeavy() << "\n" // Book::isHeavy->true, set staticaly, at compile time
+     << bref.isHeavy() << "\n" // still calls Book::isHeavy->true
+     << bptr->isHeavy() << "\n" // Book::isHeavy()->true
+     << t.isHeavy() << endl; // Text::isHeavy()
+```
+
+In C++, the virtual keyword is used to enable runtime polymorphism — meaning the function that gets called is determined at runtime based on the actual object type, not the pointer/reference type.
+
+**Why `virtual` Exists**
+By default, C++ uses compile-time binding (static binding).
+Without virtual, C++ decides which function to call based on the type of the pointer/reference, not the object.
+With virtual, C++ uses dynamic dispatch — it calls the function of the derived class if the object is derived.
+
+Example without virtual
+
+```cpp
+#include <iostream>
+using namespace std;
+
+class Animal {
+public:
+    void speak() {
+        cout << "Animal sound\n";
+    }
+};
+
+class Dog : public Animal {
+public:
+    void speak() {
+        cout << "Bark\n";
+    }
+};
+
+int main() {
+    Animal* a = new Dog();
+    a->speak();   // ❗ Calls Animal::speak
+}
+```
+
+Output: Animal sound
+
+Now with virtual:
+
+```cpp
+class Animal {
+public:
+    virtual void speak() {
+        cout << "Animal sound\n";
+    }
+};
+
+int main() {
+  Animal* a = new Dog();
+  a->speak();   // ✅ Calls Dog::speak
+}
+```
+
+Output: Bark
+
+#### What override Does
+
+override (in the derived class) tells the compiler:
+“This function MUST override a virtual function from the base class.”
+If it doesn’t match exactly, the compiler gives an error.
+
+#### Why override Is Important
+
+Because C++ requires exact signature matching.
+Even small differences mean you are NOT overriding — you’re creating a new function.
+And without override, the compiler won’t warn you.
+
+```cpp
+class Animal {
+public:
+    virtual void speak() const {
+        cout << "Animal\n";
+    }
+};
+
+class Dog : public Animal {
+public:
+    void speak() {   // ❗ Missing const
+        cout << "Bark\n";
+    }
+};
+```
+
+Non-standard UML warning: In this course we italicize all virtual methods, not just "pure virtual methods".
+
+Can write
++isHeavy(): Boolean {abstract}
+to denote virtual methods.
+
+```cpp
+Text t{"Fowler", "UML ...", 250, "UML"};
+Book b = t; // object slicing
+Book& bref = t; // no object slicing
+Book* bptr = &t; // no object slicing
+
+cout << bool alpha << b.isHeavy() << "\n" // Book::isHeavy = true
+     << bref.isHeavy() << "\n" // Text::isHeavy = true
+     << bptr->isHeavy() << "\n" // Text::isHeavy() = true
+     << t.isHeavy() << endl; // Text::isHeavy()
+```
+
+This is polymorphism (many shapes)
+
+```cpp
+Comic c[2] = {{"a1", "t1", 10, "h1"}, 
+              {"a2", "t2", 15, "h2"}};
+
+void f(Book []b) {
+  b[0] = Book{"ba1", "bt1", 200};
+}
+
+f(c);
+```
+
+`Error: c[0] has contents partially changed.`
+
+Best practise is to use an array of pointers to the parent type, so there is no object slicing. Then use virtual methods when nessescary.
+
+### Abstract Base Classes (ABC)
+
+Goal: Parent (abstract base) class defines common data, interface (including virtual methods).
+Want compiler to enfore that cannot create instances of the parent class.
+
+Solutaion: add (at least 1) "pure" virtual method
+
+```cpp
+class Student {
+  // ...
+  public:
+    virtual double calcTuition() const = 0; // Pure virtual
+}
+
+class MathStudent: public Student {
+  public:
+    virtual double calcTuition() const override {
+      // ...
+    }
+}
+
+
+Student s; // compilation error
+Student* sptr = new MathStudent{};
+```
+
+Note: as soon as a method is declared to be pure virtual, even if its implimented (in the implimenation file) the compiler enforces that the client may not create instances of the ABC.
+
+```cpp
+class X {
+  int* a;
+  public:
+    X(): a{new int[10]{0}} {}
+    ~X() {delete []a;}
+}
+
+class Y: public X {
+  int *b;
+  public:
+    Y(): b{new int[5]{0}} {}
+    ~Y() {delete []b;}
+}
+```
+
+Note: Best practise is to make destructor virtual if might inherit from (base) class.
+
+Destructor sequence is now:
+
+1. Run objects dtor body
+2. Run parent class dtor
+3. Run object data field dtors
+4. Free object memory
+
+Best practise: If want the classes to be an ABC but all methods have a reasonable (default) implimentation, make the dtor pure virutal.
+Still needs to be implimented.
+
+```cpp
+class X {
+  int* a;
+  public:
+    X(): a{new int[10]{0}} {}
+    virtual ~X() = 0;
+}
+X::~X() {delete [] a;}
+```
+
+#### `Final` keyword
+
+To state that a class cannot become a base class, use the final keyword. Enforced at compile time.
+
+```cpp
+class Y final: public X {
+  // ...
+}
+```
+
+To denote this in UML, underneath the title of Y, write "{leaf}"
+
+```cpp
+Book::Book(const Book& o): author{o.author}, title{o.title}, numPages{o.numPages} {}
+
+Text::Text(const Text& o): Book{o}, topic{o.topic} {}
+Book::Book(Book&& o): author{std::move(o.author)}, title{std::move(o.title)}, numPages{numPages} { // o is bound to rvalue but is lvalue
+
+}
+```
+
+Parent class destructor runs after object data field destructors in inheritance steps of object destruction.
+
+Q: What happens if `Book` (parent) class provides Big 5 but `Text` (child class) does not? (will be same for any of the 5.)
+
+```cpp
+Text t1 {...};
+Text t2 {t1}; // ignoring elision
+```
+
+A: Compiler provides copy ctor for `Text`. Invokes parent copy ctor.
+
+Move and copy assignment are problematic in regards to the subclasses.
+
+```cpp
+Book& Book::operator=(const Book& o) {
+  if (this == &o) return *this;
+
+  author = o.author;
+  title = o.title;
+  numPages = o.numPages;
+
+  return *this;
+}
+
+Book& Book::operator=(Book&& o) {
+  if (this == &o) return *this; // Not always needed
+
+  author = std::move(o.author);
+  title = std::move(o.title);
+  numPages = o.numPages;
+
+  return *this;
+}
+
+Text& Text::operator=(const Text& o) {
+  if (this == &o) return *this;
+
+  Book::operator=(o);
+  topic = o.topic();
+  return *this;
+}
+
+Text& Text::operator=(Text&& o) {
+  Book::operator=(std::move(o));
+  topic = std::move(o.topic);
+  return *this;
+}
+```
+
+Consider this:
+
+```cpp
+Text t1{...}, t2{...};
+Book *bp1 = &t1, *bp2 = &t2;
+*bp1 = *bp2; // both resolve to Text objects, but static type is (Book*) so Book copy assignment is called!
+```
+
+This situation is called "partial assignment".
+
+Q: Can we fix this by making move and copy assignment virtual?
+A: No, we will focus on copy= but same issue for move=.
+
+```cpp
+class Book {
+  // ...
+  public:
+    virtual Book& operator=(const Book& o); 
+}
+
+class Text: public Book {
+  // ...
+  public:
+    virtual Text& operator=(const Text& o) override; // virual keyword optional here
+    // This is an error occurding to override rules, since param of Text must be a Book
+    // The return type is fine because of the "is-a" relationship
+
+    // Would have to be (to override succesfully):
+    // virtual Text& operator=(const Book& o) override;
+}
+```
+
+So now `*bp1 =*bp2;` invokes `Text copy=` but illegal to have `t1 = Book{...}`
+
+Note: o is no longer a Text object so its a compiler error to access o.topic.
+
+```cpp
+t1 = Book{...} // legal but wrong
+Comic c {...};
+t2 = c; // legal; sibling assignment
+```
+
+Solution 1: Set up hierarchy so that partial and mixed assignment are now compilation errors. Trade off is the loss of ability to say `*pb1 =*pb2;`. Introduce an ABC.
+
+```mermaid
+classDiagram
+  Book <|-- AbstractBook
+
+  class AbstractBook  {
+    -author: String
+    -title: String
+    -numPages: Integer
+
+    +~AbstractBook()
+    # AbstractBook(const AbsractBook&)
+    # AbstractBook(AbstractBook &&)
+    # operator=(const AbstractBook&): AbstractBook&
+    # operator=(AbstractBook&&): AbstractBook&
+  }
+
+  class Text {
+    -topic: String
+    + operator=(const Text&): Text&
+  }
+```
