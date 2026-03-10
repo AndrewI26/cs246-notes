@@ -5,15 +5,15 @@
 - [3 Points of View](#3-points-of-view)
 - [Hello World](#hello-world)
 - [Streams](#streams)
-- [Dealing with Erroneous Input](#dealing-with-erroneous-input)
+- [Dealing with Erroneous Input](#dealing-with-erronenous-input)
 - [Strings](#strings)
 - [Overloading](#overloading)
 - [Structs](#structs)
 - [Constants](#constants)
 - [Parameter Passing](#parameter-passing)
 - [References](#references)
-- [Dynamic Memory Allocation](#dynamic-memory-allocation)
-- [Returning by Value, Reference and Pointer](#returning-by-value-reference-and-pointer)
+- [Dynamic Memory Allocation](#dyanmic-memory-allocation)
+- [Returning by Value, Reference and Pointer](#returning-be-value-reference-and-pointer)
 - [Operator Overloading](#operator-overloading)
 - [Overloading I/O Operators](#overloading-io-operators)
 - [Compile Bash Script](#compile-bash-script)
@@ -34,6 +34,7 @@
 - [Object Comparison](#object-comparison)
 - [Invariants and Encapsulation](#invarients-and-encapsulation)
 - [Iterator as an Idiom](#iterator-as-an-idiom)
+- [Templates](#templates)
 
 ### 3 Points of View
 
@@ -2061,3 +2062,489 @@ classDiagram
     + operator=(const Text&): Text&
   }
 ```
+
+Note, cant create `AbstractBook` instances, and client cant use its = methods.
+
+```cpp
+Text t1{...}, t2{...};
+Comic c1{...}, c2{...};
+Book b1{...}, b2{...};
+t1 = t2; // Good
+t1 = c1 // erorr
+b1 = c1 // error
+c1 = b1 // error
+```
+
+Good practise: add ABC super class with protected copy/move ctors/= to prevent partial- and mixed - assignment (compilation errors).
+
+```cpp
+class AbstractBook {
+  string author, title;
+  int numPages;
+
+  protected:
+    AbstractBook(sgtring a, string t, int n);
+    AbstractBook(const AbstractBook&);
+    AbstractBook(AbstractBook&&);
+    AbstractBook& operator=(const AbstractBook&);
+    AbstractBook& operator=(AbstractBook&&);
+
+  public:
+    virtual ~AbstractBook() = 0;
+}
+```
+
+```cpp
+AbstractBook::~AbstractBook() {}
+
+class Book: public AbstractBook {
+  public:
+    Book(...);
+    Book(const Book&);
+    ...
+    Book& operator=(Book&&);
+}
+```
+
+```cpp
+Text::Text(const Text& o): AbstractBook{o}, topic{o.topic} {}
+
+Text::Text(Text &&o): AbstractBook{std::move(o)}, topic{std::move(o.topic)} {}
+
+Text& Text::operator=(const Text& o) {
+  if (this == &o) return *this;
+  AbstractBook::operator=(o);
+  topic = o.topic;
+  return *this;
+}
+```
+
+### Templates
+
+Templates in C++ let you write generic code — meaning code that works with any type, instead of just one specific type like int or double.
+Instead of rewriting the same logic for multiple types, you write it once using a template parameter.
+
+```cpp
+int add(int a, int b) {
+    return a + b;
+}
+
+double add(double a, double b) {
+    return a + b;
+}
+
+// With templates
+template<typename T>
+T add(T a, T b) {
+    return a + b;
+}
+
+// Works for 
+add(3, 5);        // int
+add(2.5, 4.1);    // double
+```
+
+Templates are resolved at compile time.
+That means:
+The compiler generates actual code for each type used.
+It’s not runtime polymorphism.
+It does not use virtual functions.
+
+```cpp
+template<typename T, typename U>
+class Pair {
+    T first;
+    U second;
+
+public:
+    Pair(T f, U s) : first(f), second(s) {}
+};
+
+Pair<int, std::string> p(5, "hello");
+```
+
+Templates cannot be seperated into interface/implimentation files. Need the full implimentation in one shot.
+
+### Vector
+
+Part of the Standard template library (STL).
+`import <vector>;`
+
+```cpp
+vector<int> v1; // empty vector
+vector<int> v2{4, 5}; // v2 = {4, 5}
+vector<int> v3(4, 5); // v3 = {5, 5, 5, 5}
+vector<int> v4(4); // v4 = {0, 0, 0, 0}
+vector<Vec> v5(4); // requires Vec to have default ctor, makes 4 default ctor objects
+vector v6{4, 5, 6, 7}; // deduces instantiation type from value type
+
+// dtor frees heap allocated memory
+for (int i = 0; i < v6.size(); i++) {
+  cout << v6[i] << " " << endl; // unsafe access
+}
+cout << v6.front() << " " << v6.back() << endl;
+v6.pop_back(); // removes last item, void return type
+v6.push_back(99); // old way
+
+// A4
+v5.emplace_back(0, 1); // Vec{0, 1}
+
+auto it = v6.begin() + 3;
+v6.erase(it); // removes the 4th item
+// Note: adding/removing items from vector potentially damages iterator
+v6.clear(); // clears the contents
+```
+
+Q: Consider a case where want to remove all occurances of `int 5` from a vector.
+A:
+
+```cpp
+// Soln 1: This is WRONG
+for (auto it = v.begin(); it != v.end(); it++) {
+  if (*it == 5) v.erase(it); 
+}
+```
+
+Let say v points to array on the heap of [1, 2, 5, 5, 6, ...]. Once we hit the first 5, we erase the first location, so new array is [1, 2, 5, 6, ...]. But then our iterator goes to 6 next, we skip the next 5. This system does not work for consecutive 5's.
+Problem 1: skips second 5.
+Problem 2: if array "shrank", it is pointing into old array.
+
+```cpp
+// If we erase 5, then we will incriment it anyways, so we will skip the 5.
+for (auto it = v.begin(); it != v.end(); ++it) {
+  if (*it == 5) it = v.erase(it);
+}
+
+for (auto it = v.begin(); it != v.end();) {
+  if (*it == 5) it = v.erase(it);
+  else ++it;
+}
+```
+
+### Design Patterns
+
+- Class-level solution to common problems
+- Adjust general framework
+- Lets you program to the interface not the implimentation
+- Uses inheritance alot
+
+#### Iterator as a design pattern
+
+```mermaid
+classDiagram:
+  
+  class Iterator {abstract} {
+    + operator*(): Iterator {abstract}
+    + operator++(): Iterator {abstract}
+    + operator!=(): Boolean
+  }
+
+  class List {abstract} {
+    +addToFront(i: Integer)
+    +ith(i: Integer): Integer
+    +begin(): Iterator
+    +end(): Iterator
+  }
+```
+
+#### Observer
+
+- also known as pub-sub
+- 2 main variations for how state change info is retrived.
+- Push (subject passes it with notification) or pull (observer retirves after notifications)
+
+```mermaid
+classDiagram:
+  Subject --|> Observer 
+
+  Subject (ABC) {
+    +attach(o: Observer)
+    +detach(o: Observer)
+    +notifyAll()
+  }
+
+  Observer (ABC) {
+    + notify()
+  }
+```
+
+#### Decorator
+
+Used when want to enhance an object dynamically, at run-time, add features or functionality.
+
+You start with:
+
+1. A base interface (abstract class)
+2. A concrete implementation
+3. A decorator base class that wraps the interface
+4. Concrete decorators that add behavior
+
+```cpp
+import <iostream>;
+import <string>;
+
+class Pizza {
+public:
+    virtual std::string getDescription() const = 0;
+    virtual double cost() const = 0;
+    virtual ~Pizza() {}
+};
+
+class PlainPizza : public Pizza {
+public:
+    std::string getDescription() const override {
+        return "Plain Pizza";
+    }
+
+    double cost() const override {
+        return 8.0;
+    }
+};
+
+class ToppingDecorator : public Pizza {
+protected:
+    Pizza* pizza;
+
+public:
+    ToppingDecorator(Pizza* pizza) : pizza{pizza} {}
+
+    virtual ~ToppingDecorator() {
+        delete pizza;
+    }
+};
+
+class Cheese : public ToppingDecorator {
+public:
+    Cheese(Pizza* pizza) : ToppingDecorator{pizza} {}
+
+    std::string getDescription() const override {
+        return pizza->getDescription() + ", Cheese";
+    }
+
+    double cost() const override {
+        return pizza->cost() + 1.5;
+    }
+};
+
+class Pepperoni : public ToppingDecorator {
+public:
+    Pepperoni(Pizza* pizza) : ToppingDecorator{pizza} {}
+
+    std::string getDescription() const override {
+        return pizza->getDescription() + ", Pepperoni";
+    }
+
+    double cost() const override {
+        return pizza->cost() + 1;
+    }
+};
+
+
+int main() {
+    Pizza* pizza = new Pepperoni(new Cheese(new PlainPizza()));
+
+    std::cout << pizza->getDescription() << std::endl;
+    std::cout << "Cost: $" << pizza->cost() << std::endl;
+
+    delete pizza;
+}
+```
+
+### STL std::map
+
+`import <map>;`
+Impliments a dictionary with key-value pairs (std::pair) where keys are unique. Key either defines an operator or client provides a comparitor function.
+
+Usally implimented using red-black trees.
+
+```cpp
+map<int, string> m;
+m[123] = "Joe";
+m[456] = "Xiang";
+if (m[678] == s); // m[678] inserts pair{678, ""}
+
+// instead use 
+if (m.count(678) == 1) cout << m[678] << endl;
+m.erase(123); // pair with key 123
+
+for (auto& el: m) { // el is an std::pair
+  cout << "key: " << el.first << "; value: " << el.second << endl;
+}
+```
+
+Since all fields in std::pair are public, can use a C++20 "structured binding"
+
+```cpp
+for (auto& [key, value]: m) {
+  cout << "key: " << key << "; value: " << value << endl;
+}
+```
+
+Can be used in struct/class where all data fields are public:
+
+```cpp
+Vec v{1, 2};
+```
+
+### Modules Revisited
+
+So far, have been restricting ourselves to 1 class per module. But a module can hold many classes and functions.
+Q: How do we decide?
+A: Need to define 2 measures of software design quality, coupling and cohesion.
+
+Coupling: Measure of interdependency between modules and classes.
+
+Low to high coupling:
+
+- Only form of communication is through function calls (data as parameters/results)
+- Pass arrays/structs around
+- modules effect each others control flow
+- modules share global data
+- modules access each others implimentation (friends)
+
+Cohesion: How closely are module elements related to each other.
+
+Low to high cohesion:
+
+- Arbirtary grouping of unrelated elements eg. `<utility>`, `std::swap`, `std::min`
+- Have a common theme, may share some base code, but otherwise unrelated `<algorithm>` (useful for project).
+- elements manipulate objects state over its lifetime (eg. open/read/close files)
+- elements pass data to each other
+- elements cooperate to perform exactly 1 task
+
+Goal: modules should exhibit low coupling and high cohesion.
+
+Q: What if 2 classes depend on each other? (inheritance or composition)
+A: inheritance => same module
+
+Composition also suggests the same module, but may have a dependancy cycle
+
+```cpp
+//impossible
+class A {
+  int x
+  B y;
+}
+
+class B {
+  char x;
+  A y;
+}
+//impossible
+// soltn: forward declaration, pick a datafield whose size is known before declaration (pointer or refereance)
+
+class A; // forward declaration
+```
+
+Q: When must a class know the size of another class? (at compile time)
+A: When it is composed of it, or inherits from it?
+
+Problem: Cannot forward declare a module or the information within another module.
+
+- From the problem above both `A` and `B` must be in the same module.
+- Makes sense since `A` and `B` are tightly/highly coupled.
+- Must compile in dependency order for modules as well.
+
+### Decoupling Interfaces (MVC)
+
+Q: Consider a `ChessBoard` class that models the game state. Game may prompt player by printing to standard output and reading from standard input.
+But specificying streams isn't very flexible. Even worse if you want to add a GUI. `ChessBoard` keeps being impacted by I/O changes which have nothing to do with modeling game state
+
+- 2 conflicting tasks
+- leads us to the single responsibility principle, a class should only have 1 reason for change.
+
+Q: Should IO go to main?
+A: Inhibits reusability better if in class.
+
+Bring us to the MVC archetechirial pattern
+
+- model represents the state.
+- view is what the client sees and interacts with to effect the model.
+- controller mediates between model and view
+- may encode some rules
+
+### Exceptions
+
+- `std::vector<T>::at(int i)` checks that `i` is in the vectors range of indices.
+
+```cpp
+void f(vector<int>& v) {
+  v.at(100000) += 1; // Raises std::out-of-range exception
+}
+```
+
+If no code written to deal with exception, prgram aborts with unhandled exception error.
+C error-handling approach relies on either function return values, or changing value in global error variable.
+Programmer has to test but can't be forced.
+
+- intermingles with error handling code with normal execution behavior.
+- vector knows when range error occurs but not what to do about it. client knows what to do, but may not be able to detect exception. Client catches and handles exception, which may not be resolved totally or require exception to "propagate" further.
+
+- C++ lets you throw anything as an exception. Prefer to use `<stdexcept>`
+
+```cpp
+void f() {
+  throw out_of_range{"f"};
+}
+void g() {f();}
+void h() {g();}
+
+int main() {
+  try {
+    h();
+    cout << "here" << endl;
+  } catch(out_of_range& e) {
+    cerr << e.what() << endl;
+  }
+  cout << "Done" << endl;
+}
+```
+
+Stack process
+
+main -> h -> g -> f
+
+Then f throws the exception, so the stack unwinds.
+
+- If each activation frame has no handlers, remove (destroys all local objects) frame and keep searching.
+- If has handlers, look for closest match (if none and unwound main pgm stops with unhandled exception)
+- If matches, execute handler code
+  - If throw new exception (or reraise old) continue stack unwinding
+  - Else continue after last handler in block chain.
+
+```cpp
+try {
+  f();
+} catch(...) {
+  cout << "Caught something" << endl;
+}
+```
+
+Since can throw an object, object may be part of inheritance heirarchy.
+
+```cpp
+Error e;
+throw e; // Rasies an error
+Error& e2 = BigError;
+throw e2; // Raises an error
+
+void f() {throw BigError;}
+void g() {
+  try {
+    f();
+  } catch (Error e) {...} // Catches BigError, but slices it into an Error
+  // Better to catch by reference
+}
+
+void h() {
+  try {
+    f();
+  } catch (Error& e) {... // Since BigError "is an" Error, this clause always gets hit
+  } catch (BigError& e) {
+
+  }
+}
+```
+
+Rule: Order clauses from most to least specific.
+Rule: Never let a destructor raise an exception!
