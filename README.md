@@ -2548,3 +2548,161 @@ void h() {
 
 Rule: Order clauses from most to least specific.
 Rule: Never let a destructor raise an exception!
+
+### Exception Saftey
+
+```cpp
+void f() {
+  C myc;
+  C* cp = new C;
+  g();
+  delete cp;
+}
+```
+
+Q: If no exception raised by `g()`, `f()` executes properly. What happens if `g()` raises an exception?
+A: Stack unwinding takes care of destructing local object `myC` (runs destructor), but won't execute delete.
+
+Since after call to `g()`, so heap memory is leaked. Revise code:
+
+```cpp
+void f() {
+  C myc;
+  C* cp = new C;
+  try {
+    g();
+  } catch (...) {delete cp; throw;}
+  delete cp;
+}
+```
+
+Issue: Code is awkward and duplicated.
+
+Alternatives:
+
+1. Use a langauge that supports finally clasue.
+2. Use Resource Aquisition Is Initialization (RAII) idiom.
+
+- Leverage the fact that local objects will always have their destructors run during stack unwinding.
+- Resource aquired often in ctor but must be released by dtor.
+
+Works with file streams, strings and vector all apply RAII!
+
+```cpp
+{
+ ifstream in{"input.txt"};
+ string s{"Hello world"};
+ vector<int> v;
+} // v, s, in, release resources and close file.
+```
+
+### Smart pointers
+
+In modern C++, smart pointers are objects that manage dynamically allocated memory automatically. Instead of manually calling new and delete, smart pointers ensure memory is freed when it is no longer needed. This helps prevent:
+ • Memory leaks
+ • Dangling pointers
+ • Double deletes
+
+Smart pointers are part of the C++ Standard Library, specifically in the `<memory>` header.
+
+The two most common ones are:
+ • std::unique_ptr
+ • std::shared_ptr
+
+#### `std::unique_ptr`
+
+A unique_ptr represents exclusive ownership of a dynamically allocated object.
+
+```cpp
+import <memory>;
+void f() {
+  C myC;
+  unique_ptr<C> cp = new C;
+  // alternate
+  auto cp = make_unique<C>(); // make_unique takes in C's ctor params
+}
+```
+
+Key properties:
+ • Only one unique_ptr can own the object at a time
+ • Cannot be copied
+ • Can be moved
+ • Automatically deletes the object when the pointer goes out of scope
+
+```cpp
+unique_ptr<C> p1 = new C;
+unique_ptr<C> p2 = p1; // illegal copy
+```
+
+Consider an implimentation sketch of unique_ptr:
+
+```cpp
+template <class T> 
+class unique_ptr {
+  T* ptr;
+public:
+  explicit unique_ptr(T* p): ptr{p} {}
+  ~unique_ptr() {delete ptr;}
+  unique_ptr(const unique_ptr<T>& other) = delete;
+  unique_ptr(unique_ptr<T>&& other): ptr{other.ptr} {
+    other.ptr = nullptr;
+  }
+  unique_ptr<T>& operator=(const unique_ptr<T>& other) = delete;
+  unique_ptr<T>& operator=(unique_ptr<T>&& other) {
+    delete ptr;
+    ptr = o.ptr;
+    o.ptr = nullptr;
+    return *this;
+  }
+
+  T* get() const {return ptr;}
+  T& operator*() const {
+    return *ptr;
+  }
+}
+```
+
+Q: If need to copy pointers (pass as parameter, return, etc), need to consider ownership. Implies things about implementation.
+A: Suggests only the owning object will have the unique ptr object. Everybody else works with the raw heap address (not owners). Transfer ownership if use move operations.
+
+Note: Passing/returning by value transfers ownership.
+
+```cpp
+void f(unique_ptr<C> p);
+// f becomes owner of p
+
+unique_ptr<C> g();
+// g loses ownership which is passed to receiver
+
+void f(C* cp);
+// no ownership transfer, dont even know if address is to stack or heap
+
+C* h();
+// no ownership transfer, could be shared
+```
+
+#### `std::shared_ptr`
+
+A shared_ptr represents shared ownership of an object.
+
+Multiple shared_ptrs can point to the same object, and the object is destroyed only when the last pointer releases it.
+
+Internally it uses a reference count.
+
+```cpp
+#include <iostream>
+#include <memory>
+
+int main() {
+    std::shared_ptr<int> p1 = std::make_shared<int>(10);
+
+    std::cout << p1.use_count() << std::endl; // 1
+
+    {
+        std::shared_ptr<int> p2 = p1;
+        std::cout << p1.use_count() << std::endl; // 2
+    }
+
+    std::cout << p1.use_count() << std::endl; // 1
+}
+```
