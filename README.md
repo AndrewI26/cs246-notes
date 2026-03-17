@@ -982,7 +982,7 @@ Node& Node::operator=(Node&& rhs) {
 }
 ```
 
-Q: Do we need a self assignment test?
+Q: Do we need a self assignment test?  
 A: Probably not for a simple data structure but maybe for more complex ones `unique_ptr`.
 
 ```cpp
@@ -2007,7 +2007,7 @@ Book *bp1 = &t1, *bp2 = &t2;
 
 This situation is called "partial assignment".
 
-Q: Can we fix this by making move and copy assignment virtual?
+Q: Can we fix this by making move and copy assignment virtual?  
 A: No, we will focus on copy= but same issue for move=.
 
 ```cpp
@@ -2195,7 +2195,7 @@ v6.erase(it); // removes the 4th item
 v6.clear(); // clears the contents
 ```
 
-Q: Consider a case where want to remove all occurances of `int 5` from a vector.
+Q: Consider a case where want to remove all occurances of `int 5` from a vector.  
 A:
 
 ```cpp
@@ -2414,7 +2414,7 @@ Low to high cohesion:
 
 Goal: modules should exhibit low coupling and high cohesion.
 
-Q: What if 2 classes depend on each other? (inheritance or composition)
+Q: What if 2 classes depend on each other? (inheritance or composition)  
 A: inheritance => same module
 
 Composition also suggests the same module, but may have a dependancy cycle
@@ -2436,7 +2436,7 @@ class B {
 class A; // forward declaration
 ```
 
-Q: When must a class know the size of another class? (at compile time)
+Q: When must a class know the size of another class? (at compile time)  
 A: When it is composed of it, or inherits from it?
 
 Problem: Cannot forward declare a module or the information within another module.
@@ -2447,13 +2447,13 @@ Problem: Cannot forward declare a module or the information within another modul
 
 ### Decoupling Interfaces (MVC)
 
-Q: Consider a `ChessBoard` class that models the game state. Game may prompt player by printing to standard output and reading from standard input.
+Q: Consider a `ChessBoard` class that models the game state. Game may prompt player by printing to standard output and reading from standard input.  
 But specificying streams isn't very flexible. Even worse if you want to add a GUI. `ChessBoard` keeps being impacted by I/O changes which have nothing to do with modeling game state
 
 - 2 conflicting tasks
 - leads us to the single responsibility principle, a class should only have 1 reason for change.
 
-Q: Should IO go to main?
+Q: Should IO go to main?  
 A: Inhibits reusability better if in class.
 
 Bring us to the MVC archetechirial pattern
@@ -2560,7 +2560,7 @@ void f() {
 }
 ```
 
-Q: If no exception raised by `g()`, `f()` executes properly. What happens if `g()` raises an exception?
+Q: If no exception raised by `g()`, `f()` executes properly. What happens if `g()` raises an exception?  
 A: Stack unwinding takes care of destructing local object `myC` (runs destructor), but won't execute delete.
 
 Since after call to `g()`, so heap memory is leaked. Revise code:
@@ -2662,7 +2662,7 @@ public:
 }
 ```
 
-Q: If need to copy pointers (pass as parameter, return, etc), need to consider ownership. Implies things about implementation.
+Q: If need to copy pointers (pass as parameter, return, etc), need to consider ownership. Implies things about implementation.  
 A: Suggests only the owning object will have the unique ptr object. Everybody else works with the raw heap address (not owners). Transfer ownership if use move operations.
 
 Note: Passing/returning by value transfers ownership.
@@ -2705,4 +2705,191 @@ int main() {
 
     std::cout << p1.use_count() << std::endl; // 1
 }
+```
+
+### Factory Design Pattern
+
+Provides an interface for creation. Encapsulates creation rules.
+
+```mermaid
+classDiagram
+  Enemy <|-- Turtle
+  Enemy <|-- Bullet
+
+  Level <|-- Hard
+  Level <|-- Easy
+```
+
+```cpp
+class Level {
+  public: virtual Enemy* create() = 0;
+}
+```
+
+### Template Method cont
+
+Q: Consider a `Turtle` base class with a `draw()` method that calls methods `drawHead`, `drawFeet`, `drawShell`. How should the class be structered?  
+A:
+
+```cpp
+// version 1
+class Turtle {
+  public:
+    virtual draw() const;
+    virtual drawShell() const;
+    virtual drawHead() const;
+    virtual drawFeet() const;
+}
+```
+
+Problem 1:
+
+- all methods are public can be called by mutant turtles.
+- `public` implies client interface if meet preconditions, post conditions will be met and class invariants preserved
+- not preserved since everything is public
+
+Problem 2:
+
+- virtual methods can be overridden by children can change the process/algorithm
+- violate assertions
+
+Solution: only `draw` should be public, rest of methods should be at least protected, if not private. Should make these methods virtual those that need overridden.
+
+```cpp
+class Turtle {
+  virtual drawShell() const;
+  virtual drawHead() const;
+  virtual drawFeet() const;
+  public:
+    void draw() const {
+      drawShell();
+      drawHead();
+      drawFeet();
+    }
+}
+```
+
+Template method uses the Non-Virtual Interface idiom (NVI) but doesn't necessarily follow it completely.
+NVI idiom
+
+- no public methods (except dtor) should be virtual
+- virtual methods should be protected (or private) and wrapped by a non-virtual method call.
+
+Benifits:
+
+- have complete control over client interface from the start
+- easier to grant further access later than remove already granted access
+- easy to customize wrapper methods by adding code before/after call to virtual methods without affecting client.
+- a good compiler can optimize out the extra (wrapper) calls
+- no downside to using it
+
+Best practise: use NVI idiom
+eg.
+
+```cpp
+class DigitalMedia { // without NVI
+  public: 
+    virtual void play() = 0;
+}
+
+class DigitalMedia { // with NVI
+  virtual void doPlay() = 0;
+  public:
+    void play() {
+      // can add more method calls to display cover, 
+      // incriment song count, and do other logic within play.
+      doPlay();
+      // further customization
+    }
+    virtual ~DigitalMedia();
+}
+```
+
+### Back to Exception Saftey
+
+Q: What is exception saftey?  
+A: Doesn't mean that no exceptions are ever raised, nor that all exceptions are caught. It does mean that the program is left in an "unbroken" (valid) state once an exception is raised. Use the call to some function `f` that could raise an exception
+
+1. Basic exception level saftey guarantee:
+The program after the exception is raised, is in some valid but unspecified state.
+
+    - no data is corrupted, no memory is leaked, all class invariants maintained.
+
+2. Strong exception saftey level guarantee: meets constraints of basic plus must be as if call to `f()` never happened.
+**Note: may not be able to undo all effect of f() if f() had side effects, eg wrote output**
+
+3. No-throw exception saftey level guarantee: no exceptions propagate from `f()` and must guarantee that `f()` succeeds.
+
+Consider the following example:
+
+```cpp
+class A {...}; // A::g();
+class B {...}; // B::h();
+// a.g() and b.h() might raise exceptions
+
+class C {
+  A a;
+  B b;
+  public: 
+    void f() {
+      a.g();
+      b.h();
+    }
+}
+```
+
+Q: What can be reasoned about `C::f`'s exception saftey-level guarantee if `A` and `B` provide no exception saftey level guaantees?  
+A: Nothing. (no guarantees)
+
+Q: What if both provide basic exception saftey level guarantees?  
+A: If `a.g()` raises, `f` starts unwinding and are in basic exec saf lev guar. If `b.h()` raises, don't know if changing a but not changing b leaves us in a valid state or not
+
+- insufficient info
+
+Q: What is A + B offer strong exec saftey lev guarantees? (assume no non-local side effects)  
+A: If `a.g()` raises as if call never made
+
+- f unwinds and meets strong exec saf lev g.
+
+if `b.h()` raises, `f()` can meet strong ex saf lev, if g can undo changes to a
+
+- can be done if use something similar to copy-swap idiom
+
+```cpp
+void C::f() {
+  A mya{a}; // deep copies, if fails std::bad_alloc unwinds and local object
+  B myb{b};
+
+  mya.g(); // if raises unwinds
+  mya.h(); // same here
+  a = mya; // if fails, have partially changed a and b;  
+  b = myb;
+}
+```
+
+Note: copying numbers which includes memory addresses, cannot fail.
+
+- levergae the pointer to implimentation (PImpl) idiom
+
+```cpp
+struct CImpl {
+  A a;
+  B b;
+};
+
+class C {
+  unique_ptr<CImpl> pImpl;
+  public: 
+    C() {pImpl = make_unique<CImpl>();}
+    void f() {
+      auto temp = make_unique<CImpl>(*pImpl); // copy ctor
+      // if fails, f unwinds => strong e s l g.
+
+      temp->a.g(); // if throws only changed temp => strong
+      temp->b.h(); // ditto
+      std::swap(temp, pImpl) // uses std::move to exchange ownership
+      // cant fail
+    }
+}
+
 ```
