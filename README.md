@@ -2893,3 +2893,142 @@ class C {
 }
 
 ```
+
+### Exception saftey and std::vector
+
+- Since `std::vector` uses a heap-allocated array, implimented RAII since destructor frees the array.
+
+```cpp
+void f() {
+  vector<C> v; // when v goes out of scope, C dtor's will run
+}
+
+void g() {
+  vector<C*> v; // v's dtors will not free pointers 
+                // Not owner, if owner must manually free heap memory
+                // if the C objects are owned, should use smart pointers
+  vector<unique_ptr<C>> c;
+}
+```
+
+Now, `std::vector::emplace_back()` offers the strong exception saftey.
+
+Consider cases:
+
+1. Have space then create object "in place". If fails, object not created, vector unchanged.
+2. If don't have space, create new heap array and copy over old objects via copy ctor calls. (If copy ctor fails, only changed temp, then stack unwinds so strong e.s.l.g). (if copy ctor didn't fail, swap array addresses which cannot fail. Then delete old array which also cant fail since declared no throw)
+
+Q: Can we use move operations instead?
+A: Only if can guarantee that they meet the "no throw" exception saftey level guarentee; otherwise uses copy semantics.
+
+Best practise: Mark move operations as "no throw" using `noexcept`. Eg `C(C&& c) noexcept; C& operator(C&& c) noexcept;`
+
+### Casting
+
+- C casting isn't strongly type safe
+
+```c
+int i = 5;
+float f = 3.14159;
+i = (int)f;
+```
+
+C++ has 4 keywords for (basic) casting
+
+1. `static_cast`: when you are sure that the cast will succeed. Must be a reasonable cast. Undefined behavior if it fails.
+
+  ```cpp
+  int main() {
+      double x = 3.7;
+      int y = static_cast<int>(x);  // converts double → int (truncates)
+
+      cout << y << endl;  // prints 3
+  }
+  ```
+
+1. `reinterpret_cast`: unsafe, implementation-dependant, "weird" conversions. Most of the time the behavior is undefined.
+
+```cpp
+Student s;
+Turtle* tp = reinterpret_cast<Turtle>(&s)
+```
+
+1. `const_cast`: used to convert between const and non-const. non-const to const is ok. const to non-const is questionable.
+
+2. `dynamic_cast`: only works on pointers/references to classes with at least 1 virtual method since relies on underlying runtime type information (RTTI). Used for tentative conversions that might fail.
+
+```cpp
+Book* bp = new Comic;
+Text* tp = dynamic_cast<Text*>(bp);
+if (tp != nullptr) cout << tp->getTopic();
+```
+
+Q: What about references? No such thing as a "null" object to which the reference can be bound.
+A: Raises `std::bad_cast` in cast of failure.
+
+```cpp
+try {
+  Text t{...};
+  Book& b = t;
+  Comic& cref = dynamic_cast<Comic&>(b);
+  cout << cref.getHero() << endl;
+} catch (bad_cast& e) {}
+```
+
+Q: Can we cast smart pointers?
+A: Only `std::shared_ptr` can be cast.
+`static_pointer_cast`, `reinterpret_pointer_cast`, `const_pointer_cast`, `dynamic_pointer_cast`.
+
+### Copy and move revisited
+
+Can now use dynamic cast to solve move/copy assignment. Partial- and mixed- assignment now caught at run-time, not compilation. But can now do assignment using dereferenced base class pointers.
+
+```cpp
+// Book hierarchy without ABC
+Text& Text::operator=(const Book& o) {
+  Text& tother = dynamic_cast<Text&>(o);
+  if (this == &tother) return *this;
+  Book::operator=(o);
+  topic = tother.topic;
+  return *this;
+}
+```
+
+Q: Is dynamic casting good style?
+A: Consider the following:
+
+```cpp
+void whatIsIt(shared_ptr<Book> b) {
+  if (dynamic_pointer_cast<Comic>(b)) cout << "Comic";
+  else if (dynamic_pointer_cast<Text>(b)) cout << "Text";
+  else if (b) cout << "Book";
+  else cout << "Nothing";
+}
+```
+
+This code highly/tightly coupled to the Book hierarchy and must be changed if classes are added. Need to fix all dynamic cast instances and might miss some.
+But dont need to change dynamic casts in move/copy assignments.
+
+Q: Can we reduce the coupling in `whatIsIt`?  
+A: Yes, we can introduce a virtual method in base class overridden by all subclasses.
+
+```cpp
+class Book {
+  public:
+    //...
+    virtual void identify() const { cout << "Book";}
+}
+
+class Text: public Book {
+  public: 
+    virtual void idenitfy() const override {cout << "Text";}
+}
+
+void whatIsIt(Book* bp) {
+  if (bp) bp->identify();
+  else cout << "Nothing";
+}
+```
+
+Q: When is inhieritance a good (or bad) idea?  
+A: Good idea if interface are uniform across all of the classes and could have an infinite # of classes in the hierarchy.
