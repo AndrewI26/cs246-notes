@@ -2893,3 +2893,147 @@ class C {
 }
 
 ```
+
+Alternative approach to inheritance may be std::variant
+
+-> import <variant>;
+
+Variant<Turtle, Bullet> v1;
+// if dont give v1 an initial value, uses first type from list, which must have a default ctor or else its a compilation error
+
+e.g.
+```cpp
+Enemy = variant<Turtle, Bullet>;
+Enemy e {Bullet{}};
+if (holds_alternative<Turtle>(e)) {
+  Turtle t = get<Turtle>(e);
+  ...t.stealShell();
+}
+```
+
+or
+```cpp
+try {
+  Turtle t = get<Turtle>(e);
+  t.stealShell();
+} catch (std::bad_variant_access& e) {
+  ...
+}
+```
+
+Q: default initialization of a variant requires first type to have a default ctor. What if it doesn't have one?
+
+A:
+  1) if any of the types have a default ctor, pick 1 and list it first.
+  2) don't leave it uninitialized i.e. always create an object using non-default ctor
+  3) use std::monostate (equivalent to "nothing") as first type in list
+      => note: std::optional exists in <optional>
+
+How do virtual methods work?
+- not part of the standard, but how most compilers implement it
+
+```cpp
+class Vec {
+  int x, y;
+  public:
+    void f();
+}
+
+class Vec2{
+  int x, y;
+  public:
+    virtual void f();
+}
+
+Vec v;
+Vec2 w;
+
+cout << sizeof(v) << '\n' << sizeof(w) << endl;
+
+// v is 8 bytes, Vec::f stoed with all other standalone functions
+// w is 16 bytes, 2x4 (int) + 8 for "vptr" to "vtable"
+```
+
+- EVERY Vec2 object has a vptr -> space cost
+- When call a virtual method
+  1) need to find vptr
+  2) follow it to the vtable
+  3) look up virtual metho address
+  4) go to the address to execute method
+
+```cpp
+class C {
+  int x, y;
+  virtual void f();
+  virtual void g();
+  void h();
+  virtual ~C();
+}
+
+C c, d;
+```
+
+- Note: object layout is compiler-dependent
+
+### Multiple Inheritance
+- C++ lets you inherit from more than one class
+
+Consider object layout in this scenario
+```cpp
+class A {
+  protected:
+    int a;
+};
+
+Class B {
+  protected:
+    int b;
+};
+
+class C : public A, public B {
+  protected:
+    int c;
+  public:
+    void f() {
+      cout << a << '' << b << ' ' << c << endl;
+    }
+};
+```
+
+Q: what about "deadly diamond"? How many copies of A::a exist?
+```cpp
+class A {
+  public:
+    int a;
+};
+
+class B : public A {
+  pulic:
+    int b;
+};
+
+class C : public A {
+  public:
+    int c;
+};
+
+class D : public B, public C {
+  public:
+    int d;
+};
+```
+A: 2
+
+- If D tries to use A::a, whose "a" is it using? Ambiguity is a compilation error
+- Can disambiguate using B::a or C::a.
+  => But now the question is which one needs to be maintained? both?
+
+Solution:
+if want a single copy of A's data fields in the inheritance hierarchy, use "virtual inheritance"
+
+```cpp
+class A {...} // unchanged
+class B : virtual public A {...};
+class C : virtual public A {...};
+class D : public B, public C {...};
+```
