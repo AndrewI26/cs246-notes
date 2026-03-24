@@ -3030,5 +3030,227 @@ void whatIsIt(Book* bp) {
 }
 ```
 
+### Virtual tables
+
 Q: When is inhieritance a good (or bad) idea?  
 A: Good idea if interface are uniform across all of the classes and could have an infinite # of classes in the hierarchy.
+
+```cpp
+try {
+  Turtle t = get<Turtle>(e);
+  t.stealShell();
+} catch (std::bad_variant_access &e) {
+  // ...
+}
+```
+
+Q: Default init of a variant requires first type to have a default ctor. What if it doesn't have one?
+
+A:
+
+1. If any of the types have a default ctor, pick 1 and list it first
+2. Don t leave it uninitilizaed alwasy create an object using non-default ctor
+
+A:
+
+1. If any of the types have a default ctor, pick 1 and list it first
+2. Don t leave it uninitilizaed alwasy create an object using non-default ctor.
+3. Use `std::monostate` (equivilent to nothing) as first type in list. Note: `std::optional` exists in `<optional>`
+
+How do virtual methods work?
+
+- Not part of the standard but how most compilers impliment it.
+
+```cpp
+class Vec {
+  int x, y;
+  public: 
+    void f();
+}
+class Vec2 {
+  int x, y;
+  public: 
+    virtual void f();
+}
+Vec v;
+Vec2 w;
+cout << sizeof(v) << '\n' << sizeof(w) << endl;
+// sizeof(v) = 8 bytes. Vec::f stored with all other stand alone functions.
+// sizeof(w) = 2 x 4 (ints) + 8 (for vptr)
+// vptr is a virtual pointer to a virtual table
+```
+
+Every Vec2 object has a vptr which has a space cost.
+When call a virtual method
+
+1. Need to find vptr
+2. Follow it to the vtable
+3. Look up virtual method address
+4. Go to the address to execute method
+
+```cpp
+class C {
+  int x, y;
+  virtual void f();
+  virtual void g();
+  void h();
+  virtual ~C();
+}
+
+C c, d;
+```
+
+```cpp
+#include <iostream>
+using namespace std;
+
+class Base {
+public:
+    virtual void foo() {
+        cout << "Base::foo" << endl;
+    }
+
+    virtual void bar() {
+        cout << "Base::bar" << endl;
+    }
+};
+
+class Derived : public Base {
+public:
+    void foo() override {
+        cout << "Derived::foo" << endl;
+    }
+};
+
+int main() {
+    Base* b = new Derived();  // base pointer to derived object
+    b->foo();                 // virtual call
+}
+```
+
+```mermaid
+flowchart LR
+    subgraph B["Book b"]
+        VPTR[vptr]
+        TITLE[title]
+        AUTHOR[author]
+        NUMPAGES[numPages]
+    end
+    subgraph T["Text t"]
+        VPTR[vptr]
+        TITLE[title]
+        AUTHOR[author]
+        NUMPAGES[numPages]
+        TOPIC[topic]
+    end
+
+    subgraph VT_BOOK["vtable"]
+        F0[0: isHeavy()]
+        F1[1: ~Book()]
+    end
+    subgraph VT_TEXT["vtable"]
+        F0[0: isHeavy()]
+        F1[1: ~Text()]
+    end
+
+    B --> VT_BOOK
+    T --> VT_TEXT
+
+```
+
+Note object layout is compiler dependant.
+
+### `std::variant`
+
+std::variant (note: spelled variant, not varient) is a type-safe union introduced in C++17. It lets a variable hold one value out of several possible types, while keeping track of which type is currently active.
+
+```cpp
+#include <variant>
+#include <string>
+
+std::variant<int, double, std::string> v;
+v = 10;              // holds int
+v = 3.14;            // now holds double
+v = "hello";         // now holds std::string
+
+int x = std::get<int>(v);  // works only if v currently holds int
+
+if (auto p = std::get_if<int>(&v)) {
+    // p is int*
+}
+std::visit([](auto&& value) {
+    std::cout << value << std::endl;
+}, v);
+```
+
+#### Internals
+
+A std::variant roughly contains:
+
+- Storage large enough for the biggest type
+- An index indicating which type is active
+
+```cpp
+struct variant {
+    void* storage;
+    size_t active_index;
+};
+```
+
+### Multiple Inheritance
+
+- C++ lets you inherit from more than one class
+
+A Monotreme (egg-laying mammal) might inherit from a Oviparous (egg laying) and Mammal
+
+```cpp
+class A {
+  protected: 
+    int a;
+}
+
+class B {
+  protected:
+    int b;
+}
+
+class C: public A, public B {
+  protected:
+    int c;
+  public: 
+    void f() {
+      cout << a << " " << b << " " << c << endl;
+    }
+}
+
+C myC;
+myC.f();
+```
+
+C has fields a, b, c (in that order). Nothing ambiguous, fairly straight forward object layout.
+
+Q: What about the deadly diamond problem?
+
+```mermaid
+flowchart TD
+    A[A]
+    B[B]
+    C[C]
+    D[D]
+
+    A --> B
+    A --> C
+    B --> D
+    C --> D
+```
+
+How many copies of `A::a` exists? 2 copies. If we try to access `A::a` it is ambiguous which source the `a` came from, (which `A::a` to choose). Ambiguity is a compilation error. Can disambiguate using `B::a` or `C::a`. Which one needs to be maintained? Both?  
+
+Solution: If want a single copy of `A`'s data fields in the inheritance hierarchy use `virtual inheritance`
+
+```cpp
+class A {}; // unchanged
+class B: virtual public A {};
+class C: virtual public A {};
+class D: public B, public C {};
+```
