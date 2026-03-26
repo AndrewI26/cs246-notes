@@ -2893,3 +2893,146 @@ class C {
 }
 
 ```
+
+Q: Need to know distances from end of derived classes to start of base classes (e.g. end of B to start of A). Where is this stored?
+A:
+```cpp
+D *d = new D;
+A *a = d; // has address of start of A. i.e. vptrA, not vtprB,D
+```
+This address change also happens with static_cast/dynamic_cast, but not reinterpret_cast
+- Offsets are stored in the vtable, which is why it's naed virtual table, since comes from "virtual iheritance"
+
+### Template Functions
+
+- Functions with one or more template types
+  - If can't be intuited from parameters (e.g. void parameters), specify type
+
+```cpp
+min<int>(-1, 55);
+min(-1, 55);
+min<char>('z', 'x');
+min<Student>(s1, s2);
+
+template<typename T>
+  T min(T a, T b) {
+    return (a < b ? a : b);
+  }
+```
+- Implicit assertion that operator < is defined for T
+
+Consider a foreach function that uses the AbstractIterator from the Iterator design pattern
+```cpp
+void foreach(AbstractIterator start, AbstractIterator end, int (*f)(int)) {
+  while (start != end) {
+    f(*start); // assume *iterator returns int
+    ++start;
+  }
+}
+```
+Note: works for any iterator that provides operators: *, !=, ++
+  - Even works for pointers
+
+This brings us to <algorithm> library.
+This is a collection of functions that use iterators to perform common tasks
+
+```cpp
+template<class Iter, class Fn>
+  void for_each(Iter start, Iter end, Fn f) {
+    while (start != end) {
+      f(*start);
+      ++start;
+    }
+  }
+
+template<class Iter, class T>
+  Iter find(Iter start, Iter end, const T& val); 
+// returns iterator to value that matches "val" in range [start, end) or end
+// T defines operator ==
+```
+There's a similar function, "count", that counts the # of occurrences of parameter "val"
+
+```cpp
+template<class InIter, class OutIter>
+  OutIter copy(InIter start, InIter end, OutIter result);
+// *result = *star; copies!
+// returns result i.e. where output iterator stopped so we can append further data
+```
+Problem: T::operator= doesn't know about its container so can't resize output container if it runs out of space
+  - also not part of iterator (base iterator) functionality
+  - output container must be large enough
+
+```cpp
+vector v = {1, 2, 3, 4, 5, 6, 7};
+vector<int> w(4); // space for 4 ints
+copy(v.begin() + 1, v.begin() + 5, w.begin()); // w {2, 3, 4, 5}
+```
+
+```cpp
+template<class InIter, class OutIter, class Fn>
+  OutIter transform(InIter start, InIter end, OutIter result, Fn f);
+// *result = f(*start); in range [start, end)
+// returns where output iter stopped
+
+//e.g.
+int add1(int i) { return ++i };
+vector v = {2, 3, 5, 7, 11};
+vector<int> w(v.size());
+transform(v.begin, v.end(), w.begin(), add1);
+```
+
+Q: can we generalize the <algorithm> transform function further?
+A: can both generalize the function and the iterator. We'll start with the function
+
+### Function Objects
+
+Leverages the fact that objects have state and that it persists for the life of the object.
+Uses the fact that a class can override operator()
+
+Version 1
+```cpp
+class Plus1 {
+  public:
+    int operator()(int n) { return n+1; }
+};
+
+Plus1 p;
+p(4); // returns 5
+transform(v.begin(), v.end(), w.begin(), p);
+```
+
+Version 2
+```cpp
+class Plus {
+  int n, m;
+  public:
+    Plus(int n, int m) : n{n}, m{m} {}
+    int operator()(int i) {
+      int res = i + n;
+      n += m;
+      return res;
+    }
+};
+```
+Q: if the object instance is only used once, in the transform, do I need a local object?
+A: use an rvalue!
+
+Version 3
+```cpp
+transform(v.begin(), v.end(), w.begin(), Plus{5, 3});
+```
+
+BUT C++ now has lambdas, so could use that instead of a function object.
+
+### Lambdas
+Consider a function that returns true if an integer is even
+
+```cpp
+bool even(int n) { return n % 2 == 0; }
+copy_if(v.begin(), v.end(), w.begin(), even);
+```
+but if "even" is only used in copy_if, could replace the parameter passed with a lambda
+
+```cpp
+copy_if(v.begin(), v.end(), w.begin(), [](int n){return n%2 == 0;});
+```
