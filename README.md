@@ -3254,3 +3254,21 @@ class B: virtual public A {};
 class C: virtual public A {};
 class D: public B, public C {};
 ```
+
+### Generalizing Iterators
+
+Thanks to duck typing, anything that provides operators: !=, ++, and * can be treated as an iterator. This includes other data sources and destinations including streams.
+
+```cpp
+import <iterator>;
+
+ostream_iterator<int> out{cout, ", "};
+vector v = {1, 2, 3, 4};
+copy(v.begin(), v.end(), out);
+// 1, 2, 3, 4, 5, 
+```
+
+#### Range Abstraction
+
+Q: Consider `std::vector::erase`, which takes an iterator to the item to remove. What if we want to remove multiple (k) items?  
+Problem: If item isn't at end of underlying array, have to shuffle all items over by 1 (O(n) worst case). If removing k items, in worst case k * O(n). Would be cheaper to fill k spaces, once. Theres now a version of `std::vecotr::erase` (first, last), that takes a pair of iterators and erases from [first, last).
