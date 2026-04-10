@@ -1866,7 +1866,7 @@ Best practise is to use an array of pointers to the parent type, so there is no 
 Goal: Parent (abstract base) class defines common data, interface (including virtual methods).
 Want compiler to enfore that cannot create instances of the parent class.
 
-Solutaion: add (at least 1) "pure" virtual method
+Solution: add (at least 1) "pure" virtual method
 
 ```cpp
 class Student {
